@@ -1,6 +1,7 @@
-import express from 'express';
-import { getAudio, validateGenderChar } from './speech.mjs';
-import * as dotenv from 'dotenv';
+import express from "express";
+import { createAudio, validateGenderChar } from "./speech.mjs";
+import * as dotenv from "dotenv";
+import { getError } from "./results.mjs";
 
 // Maybe try this async error handling:
 // https://stackoverflow.com/questions/51391080/handling-errors-in-express-async-middleware
@@ -9,37 +10,44 @@ const app = express();
 dotenv.config();
 
 app.use(express.static("public"));
+app.use("/audio", express.static("audio"));
 
 app.get("/", async (_, res) => {
   try {
-    const result = { "Route": "/" }
+    const result = { Route: "/" };
     return res.json(result);
   } catch (error) {
     console.error(error);
-    return res.json({
-      "Status": "Error",
-      "Message": error.toString()
-    });
+    return getError(error);
   }
 });
 
-app.get("/say/:gender/:text", async (req, res) => {
+// CREATE - return a JSON response describing where to download the audio
+app.get("/create/:gender/:text", async (req, res) => {
   try {
     const valid = validateGenderChar(req.params.gender);
-    if (!valid)     return res.json({
-      "Status": "Error",
-      "Message": error.toString()
-    });
+    if (!valid) return getError("Invalid gender character; try 'f' or 'm'");
 
-    //const result = { "Route": "Say", "Params" : req.params }
-    const result = await getAudio(req.params.gender, req.params.text);
+    const result = await createAudio(req.params.gender, req.params.text);
+    console.log("Return", result);
     return res.json(result);
   } catch (error) {
     console.error(error);
-    return res.json({
-      "Status": "Error",
-      "Message": error.toString()
-    });
+    return getError(error);
+  }
+});
+
+// SAY - Return streaming audio
+app.get("/say/:gender/:text", async (req, res) => {
+  try {
+    const valid = validateGenderChar(req.params.gender);
+    if (!valid) return getError("Invalid gender character; try 'f' or 'm'");
+
+    const result = getError("Not implemented");
+    return res.json(result);
+  } catch (error) {
+    console.error(error);
+    return getError(error);
   }
 });
 

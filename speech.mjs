@@ -1,64 +1,72 @@
-import { createId } from '@paralleldrive/cuid2';
+import { createId } from "@paralleldrive/cuid2";
 import sdk from "microsoft-cognitiveservices-speech-sdk";
 
-import { getFailure, getSuccess } from './results.mjs';
+import { getError, getFailure, getSuccess } from "./results.mjs";
+import { getAudioName } from "./common.mjs";
 
 const femaleVoiceName = "vi-VN-HoaiMyNeural";
 const maleVoiceName = "vi-VN-NamMinhNeural";
 
 const getVoice = (genderChar) => {
-    return genderChar === 'f'
-        ? femaleVoiceName
-        : maleVoiceName;
-}
+  return genderChar === "f" ? femaleVoiceName : maleVoiceName;
+};
 
 export const validateGenderChar = (genderChar) => {
-    return genderChar === "f" || genderChar === "m";
-}
+  return genderChar === "f" || genderChar === "m";
+};
 
-export const getAudio = (genderChar, text) => {
-    return new Promise((resolve, reject) => {
+export const createAudio = (genderChar, text) => {
+  return new Promise((resolve, reject) => {
+    const id = createId();
+    const audioFileName = getAudioName(genderChar, id);
 
-        const id = createId();
-        const audioFileName = `audio/${genderChar}-${id}.wav`;
+    console.log("createAudio", audioFileName);
+    console.log(process.env.SPEECH_KEY, process.env.SPEECH_REGION);
+    if (!process.env.SPEECH_KEY || !process.env.SPEECH_REGION)
+      reject(getError("Unable to connect to speech server"));
 
-        console.log("getAudio", audioFileName);
-        console.log(process.env.SPEECH_KEY, process.env.SPEECH_REGION)
+    // TODO write id and text to a table somewhere for cache/lookup
 
-        // TODO write id and text to a table somewhere for cache/lookup
+    try {
+      // Connect SDK
+      const speechConfig = sdk.SpeechConfig.fromSubscription(
+        process.env.SPEECH_KEY,
+        process.env.SPEECH_REGION
+      );
+      const audioConfig = sdk.AudioConfig.fromAudioFileOutput(audioFileName);
 
-        // Connect SDK
-        const speechConfig = sdk.SpeechConfig.fromSubscription(
-            process.env.SPEECH_KEY,
-            process.env.SPEECH_REGION
-        );
-        const audioConfig = sdk.AudioConfig.fromAudioFileOutput(audioFileName);
+      speechConfig.speechSynthesisVoiceName = getVoice(genderChar);
 
-        speechConfig.speechSynthesisVoiceName = getVoice(genderChar);
+      // Create the speech synthesizer.
+      var synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig);
 
-        // Create the speech synthesizer.
-        var synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig);
-
-        synthesizer.speakTextAsync(text,
-            function (result) {
-                console.log("Result", result);
-                if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-                    console.log("Synthesis finished.");
-                } else {
-                    console.error("Speech synthesis canceled, " + result.errorDetails);
-                }
-                synthesizer.close();
-                synthesizer = null;
-                const resultModel = getSuccess(audioFileName, id, text, result.resultId);
-                resolve(resultModel);
-            },
-            function (err) {
-                synthesizer.close();
-                synthesizer = null;
-                const resultModel = getFailure(id, text);
-                reject(resultModel);
-            });
-
-        console.log("Now synthesizing to: " + audioFileName);
-    });
-}
+      synthesizer.speakTextAsync(
+        text,
+        function (result) {
+          if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+            console.log("Synthesis finished.");
+          } else {
+            console.error("Speech synthesis canceled, " + result.errorDetails);
+          }
+          synthesizer.close();
+          synthesizer = null;
+          const resultModel = getSuccess(
+            audioFileName,
+            id,
+            text,
+            result.resultId
+          );
+          resolve(resultModel);
+        },
+        function (err) {
+          synthesizer.close();
+          synthesizer = null;
+          const resultModel = getFailure(id, text);
+          reject(resultModel);
+        }
+      );
+    } catch (error) {
+      reject(getError(error));
+    }
+  });
+};
